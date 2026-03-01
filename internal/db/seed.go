@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
+
 	"github.com/hannanaarif/Social/internal/store"
 )
 
@@ -44,7 +46,7 @@ var titles = []string{
 	"Optimizing Performance",
 }
 
- var contents = []string{
+var contents = []string{
 	"Go makes backend development simple, fast, and highly efficient for scalable systems.",
 	"Concurrency in Go allows programs to handle thousands of tasks simultaneously.",
 	"Understanding slices is essential for writing idiomatic and memory-efficient Go code.",
@@ -74,7 +76,6 @@ var tags = []string{
 	"microservices", "json", "security", "deployment", "scalability",
 }
 
-
 var comments = []string{
 	"Great article, really helped me understand the concept!",
 	"This was super clear and easy to follow.",
@@ -98,7 +99,7 @@ var comments = []string{
 	"Fantastic content, thanks for posting!",
 }
 
-func Seed(store *store.Storage) {
+func Seed(store *store.Storage, db *sql.DB) {
 	ctx := context.Background()
 	users := generateUsers(100)
 
@@ -124,6 +125,18 @@ func Seed(store *store.Storage) {
 		}
 	}
 
+	for _, user := range users {
+		followerID := users[rand.Intn(len(users))].ID
+		if followerID == user.ID {
+			continue // avoid self follow
+		}
+		if err := store.Followers.Follow(ctx, followerID, user.ID); err != nil {
+			if err.Error() != "resource already exists" {
+				log.Println("error while following", err)
+			}
+		}
+	}
+
 	log.Println("Seeding completed successfully")
 }
 
@@ -143,33 +156,31 @@ func generateUsers(num int) []*store.User {
 func generatePosts(num int, users []*store.User) []*store.Post {
 	posts := make([]*store.Post, num)
 	// TODO: Implement post generation logic
-    for i:=0;i<num;i++{
-		user:=users[rand.Intn(len(users))]
-		posts[i]=&store.Post{
-			UserID: user.ID,
-			Title: titles[rand.Intn(len(titles))],
+	for i := 0; i < num; i++ {
+		user := users[rand.Intn(len(users))]
+		posts[i] = &store.Post{
+			UserID:  user.ID,
+			Title:   titles[rand.Intn(len(titles))],
 			Content: contents[rand.Intn(len(contents))],
 			Tags: []string{
-					tags[rand.Intn(len(tags))],
-					tags[rand.Intn(len(tags))],
-				},
+				tags[rand.Intn(len(tags))],
+				tags[rand.Intn(len(tags))],
+			},
 		}
 	}
 
 	return posts
 }
 
-
 func generateComments(num int, users []*store.User, posts []*store.Post) []*store.Comment {
 	cmt := make([]*store.Comment, num)
 	// TODO: Implement comment generation logic
-	for i:=0;i<num;i++{
-		cmt[i]=&store.Comment{
-		PostID: posts[rand.Intn(len(posts))].ID,
-		UserID: users[rand.Intn(len(users))].ID,
-		Content:comments[rand.Intn(len(comments))],
+	for i := 0; i < num; i++ {
+		cmt[i] = &store.Comment{
+			PostID:  posts[rand.Intn(len(posts))].ID,
+			UserID:  users[rand.Intn(len(users))].ID,
+			Content: comments[rand.Intn(len(comments))],
 		}
 	}
 	return cmt
 }
-
