@@ -125,16 +125,41 @@ func (app *application) unfollowUserHandler(w http.ResponseWriter, r *http.Reque
 		app.InternalServerError(w, r, err)
 	}
 }
+// ActivateUser godoc
+//
+// @Summary      Activates/Register a user
+// @Description  Activates/Register a user by invitation token
+// @Tags         users
+// @Produce      json
+// @Param        token   path   string  true  "Invitation token"
+// @Success      204     {string} string "User activated"
+// @Failure      404     {object} error
+// @Failure      500     {object} error
+// @Security     ApiKeyAuth
+// @Router       /users/activate/{token} [put]
+func (app *application) activateUserHandler(w http.ResponseWriter, r *http.Request) {
+	token:=chi.URLParam(r,"token");
+	if token==""{
+		app.badRequest(w,r,errors.New("token is required"))
+		return
+	}
 
-// unfollowUserByEmailHandler godoc
-// @Summary		Unfollow user by email
-// @Description	Unfollow a user by email
-// @Tags			users
-// @Produce		json
-// @Param			userID	path		int	true	"User ID"
-// @Success		200		{object}	nil
-// @Failure		500		{object}	error
-// @Router			/users/{userID}/unflowemail [get]
+	err:=app.store.Users.Activate(r.Context(),token)
+	if err!=nil{
+		switch err {
+		case store.ErrNotFound:
+			app.badRequest(w, r, err)
+		default:
+			app.InternalServerError(w, r, err)
+		}
+		return
+	}
+	if err:=writeJSON(w,http.StatusOK,nil);err!=nil{
+		app.InternalServerError(w,r,err)
+	}
+	
+
+}
 
 func (app *application) userContextMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

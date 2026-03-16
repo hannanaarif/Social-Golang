@@ -15,6 +15,11 @@ type RegisterUserPayload struct {
 	Password string `json:"password" validate:"required,min=3,max=72"`
 }
 
+type UserWithToken struct {
+	*store.User
+	Token string `json:"token"`
+}
+
 // registerUserHandler godoc
 //
 //	@Summary		Registers a user
@@ -23,11 +28,10 @@ type RegisterUserPayload struct {
 //	@Accept			json
 //	@Produce		json
 //	@Param			payload	body		RegisterUserPayload	true	"User credentials"
-//	@Success		201		{object}	store.User			"User registered"
+//	@Success		201		{object}	UserWithToken		"User registered"
 //	@Failure		400		{object}	error
 //	@Failure		500		{object}	error
 //	@Router			/authentication/user [post]
-
 func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Request) {
 	var payload RegisterUserPayload
 	if err := readJSON(w, r, &payload); err != nil {
@@ -48,23 +52,22 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 	//hash the user password
 	//Store the user in the database
 
-	if err:=user.Password.Set(payload.Password);err!=nil{
+	if err := user.Password.Set(payload.Password); err != nil {
 		app.InternalServerError(w, r, err)
 		return
 	}
 
-	ctx:=r.Context()
+	ctx := r.Context()
 
-	plainToken:=uuid.New().String()
+	plainToken := uuid.New().String()
 
 	//store the token in the database
 
-	hash:=sha256.Sum256([]byte(plainToken))
-	hashedToken:=hex.EncodeToString(hash[:])
-	
+	hash := sha256.Sum256([]byte(plainToken))
+	hashedToken := hex.EncodeToString(hash[:])
 
-	err:=app.store.Users.CreateAndInvite(ctx,user,hashedToken,app.config.mail.exp)
-	if err!=nil{
+	err := app.store.Users.CreateAndInvite(ctx, user, hashedToken, app.config.mail.exp)
+	if err != nil {
 		switch err {
 		case store.ErrDuplicateEmail:
 			app.badRequest(w, r, err)
@@ -78,8 +81,12 @@ func (app *application) registerUserHandler(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	userWithToken:=UserWithToken{
+		User: user,
+		Token: plainToken,
+	}
 
-	if err := app.jsonResponse(w, http.StatusCreated, "User registered"); err != nil {
+	if err := app.jsonResponse(w, http.StatusCreated, userWithToken); err != nil {
 		app.InternalServerError(w, r, err)
 		return
 	}
