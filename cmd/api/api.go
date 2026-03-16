@@ -1,24 +1,34 @@
 package main
 
 import (
-	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/hannanaarif/Social/docs"
 	"github.com/hannanaarif/Social/internal/store"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.uber.org/zap"
 )
 
 type application struct {
 	config config
 	store  *store.Storage
+	logger *zap.SugaredLogger
 }
 
 type config struct {
-	addr string
-	db   dbConfig
-	env  string
+	addr   string
+	db     dbConfig
+	env    string
+	apiUrl string
+	mail   mailConfig
+}
+
+type mailConfig struct {
+	exp time.Duration
 }
 
 type dbConfig struct {
@@ -41,8 +51,13 @@ func (app *application) mount() http.Handler {
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"), // The url pointing to API definition
+	))
+
 	r.Route("/v1", func(r chi.Router) {
 		r.Get("/health", app.healthCheckHandler)
+
 		r.Route("/posts", func(r chi.Router) {
 			r.Post("/", app.createPostHandler)
 			r.Get("/", app.getAllPostsHandler)
@@ -59,13 +74,17 @@ func (app *application) mount() http.Handler {
 		})
 
 		r.Route("/users", func(r chi.Router) {
-			r.Get("/feed",app.getUserFeedHandler)
+			r.Get("/feed", app.getUserFeedHandler)
 			// Constrain to digits so `/feed` can never be captured as a userID.
-			r.Route("/{userID:[0-9]+}",func(r chi.Router){
+			r.Route("/{userID:[0-9]+}", func(r chi.Router) {
 				r.Use(app.userContextMiddleware)
-				r.Get("/",app.getUserHandler)
-				r.Put("/follow",app.followUserHandler)
-				r.Put("/unfollow",app.unfollowUserHandler)
+				r.Get("/", app.getUserHandler)
+				r.Put("/follow", app.followUserHandler)
+				r.Put("/unfollow", app.unfollowUserHandler)
+			})
+
+			r.Route("/authentication", func(r chi.Router) {
+				r.Post("/user", app.registerUserHandler)
 			})
 		})
 	})
@@ -74,6 +93,10 @@ func (app *application) mount() http.Handler {
 }
 
 func (app *application) Run(mux http.Handler) error {
+	docs.SwaggerInfo.Version = version
+	// Strip protocol from apiUrl for Swagger Host
+	docs.SwaggerInfo.Host = strings.TrimPrefix(strings.TrimPrefix(app.config.apiUrl, "http://"), "https://")
+	docs.SwaggerInfo.BasePath = "/v1"
 	srv := &http.Server{
 		Addr:         app.config.addr,
 		Handler:      mux,
@@ -82,7 +105,7 @@ func (app *application) Run(mux http.Handler) error {
 		IdleTimeout:  time.Second * 30,
 	}
 
-	log.Printf("Server has started at %s", app.config.addr)
+	app.logger.Info("Server has started @ %s", app.config.addr)
 
 	return srv.ListenAndServe()
 }

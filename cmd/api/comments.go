@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+
 	"github.com/hannanaarif/Social/internal/store"
 )
 
@@ -10,6 +11,17 @@ type createCommentPayload struct {
 	Content string `json:"content" validate:"required"`
 }
 
+// createCommentHandler godoc
+// @Summary		Create a comment
+// @Description	Create a new comment on a post
+// @Tags			comments
+// @Accept			json
+// @Produce		json
+// @Param			payload	body		createCommentPayload	true	"Comment payload"
+// @Success		201		{object}	store.Comment
+// @Failure		400		{object}	error
+// @Failure		500		{object}	error
+// @Router			/comments [post]
 func (app *application) createCommentHandler(w http.ResponseWriter, r *http.Request) {
 	var payload createCommentPayload
 	if err := readJSON(w, r, &payload); err != nil {
